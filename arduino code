@@ -1,0 +1,347 @@
+// Libraries
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+#include <Keypad.h>
+
+// Objects
+
+LiquidCrystal_I2C lcd(0x27,16,2);
+Servo gate;
+const byte ROWS = 4;
+const byte COLS = 4;
+
+char keys[ROWS][COLS] = {
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
+};
+
+byte rowPins[ROWS] = {4, 5, 6, 7};
+byte colPins[COLS] = {13, A1,A2,A3};
+
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+// Pin Definitions
+const int trigPin = 8;
+const int echoPin = 9;
+
+const int greenLED = 3;
+const int redLED   = 2;
+const int whiteLED = 12;
+
+const int buzzer = 11;
+
+const int ldrPin = A0;
+
+// Global Variables
+long duration;
+int distance;
+int lightValue;
+
+String password = "123";
+String enteredPassword = "";
+
+bool alarm = false;
+int wrongAttempts = 0;
+//Set up 
+void setup()
+{
+
+Serial.begin(9600);
+
+lcd.init();
+
+lcd.backlight();
+
+pinMode(trigPin,OUTPUT);
+pinMode(echoPin,INPUT);
+
+pinMode(greenLED,OUTPUT);
+pinMode(redLED,OUTPUT);
+pinMode(whiteLED,OUTPUT);
+
+pinMode(buzzer,OUTPUT);
+gate.attach(10);
+gate.write(0);
+
+digitalWrite(greenLED,HIGH);
+digitalWrite(redLED,LOW);
+digitalWrite(whiteLED,LOW);
+
+lcd.clear();
+lcd.setCursor(0,0);
+lcd.print("Egyptian");
+lcd.setCursor(0,1);
+lcd.print("Museum");
+ delay(2000);
+lcd.clear();
+lcd.setCursor(0,0);
+lcd.print("System Ready");
+
+delay(2000);
+
+}
+// Display Artifact Function
+void displayArtifact()
+{
+  static unsigned long lastTime = 0;
+  static int page = 0;
+
+  if (millis() - lastTime >= 1000)
+  {
+    lastTime = millis();
+
+    lcd.clear();
+
+    switch(page)
+    {
+      case 0:
+        lcd.setCursor(0,0);
+        lcd.print("Tutankhamun");
+        lcd.setCursor(0,1);
+        lcd.print("Gold Mask");
+        break;
+
+      case 1:
+        lcd.setCursor(0,0);
+        lcd.print("King of");
+        lcd.setCursor(0,1);
+        lcd.print("18th Dynasty");
+        break;
+
+      case 2:
+        lcd.setCursor(0,0);
+        lcd.print("Discovered");
+        lcd.setCursor(0,1);
+        lcd.print("1922");
+        break;
+
+      case 3:
+        lcd.setCursor(0,0);
+        lcd.print("Howard Carter");
+        lcd.setCursor(0,1);
+        lcd.print("Found Tomb");
+        break;
+    }
+
+    page++;
+
+    if(page > 3)
+      page = 0;
+  }
+}
+// Smart Lighting Function
+void smartLighting()
+{
+
+lightValue = analogRead(ldrPin);
+
+if(lightValue < 700)
+{
+digitalWrite(whiteLED,HIGH);
+}
+else
+{
+digitalWrite(whiteLED,LOW);
+}
+
+}
+// Read Distance Function
+int readDistance()
+{
+
+digitalWrite(trigPin,LOW);
+delayMicroseconds(2);
+
+digitalWrite(trigPin,HIGH);
+delayMicroseconds(10);
+
+digitalWrite(trigPin,LOW);
+
+duration = pulseIn(echoPin,HIGH);
+
+distance = duration * 0.034 / 2;
+
+Serial.print("Distance = ");
+Serial.print(distance);
+Serial.println(" cm");
+
+return distance;
+
+}
+//AlarmOn function 
+void alarmON()
+{
+
+alarm = true;
+
+gate.write(90);
+
+digitalWrite(redLED,HIGH);
+
+digitalWrite(greenLED,LOW);
+
+tone(buzzer,1000);
+
+lcd.clear();
+
+lcd.setCursor(0,0);
+lcd.print("WARNING!");
+
+lcd.setCursor(0,1);
+lcd.print("Enter Pass");
+
+}
+//AlarmOff function 
+void alarmOFF()
+{
+
+alarm = false;
+
+gate.write(0);
+
+digitalWrite(redLED,LOW);
+
+digitalWrite(greenLED,HIGH);
+
+noTone(buzzer);
+
+lcd.clear();
+
+lcd.setCursor(0,0);
+lcd.print("Access");
+
+lcd.setCursor(0,1);
+lcd.print("Granted");
+
+delay(2000);
+
+}
+// Password Function
+bool checkPassword()
+{
+
+enteredPassword = "";
+
+lcd.clear();
+
+lcd.setCursor(0,0);
+lcd.print("Password:");
+
+while(enteredPassword.length() < 3)
+{
+
+char key = keypad.getKey();
+
+if(key)
+{
+
+if(key >= '0' && key <= '9')
+{
+
+enteredPassword += key;
+
+lcd.setCursor(enteredPassword.length()-1,1);
+
+lcd.print("*");
+
+}
+
+}
+
+}
+
+if(enteredPassword == password)
+{
+
+return true;
+
+}
+
+else
+{
+
+wrongAttempts++;
+
+lcd.clear();
+
+lcd.setCursor(0,0);
+lcd.print("Wrong Pass");
+
+delay(2000);
+
+return false;
+
+}
+
+}
+// Loop
+void loop()
+{
+
+  smartLighting();
+
+  distance = readDistance();
+
+  if(distance > 50)
+  {
+
+    displayArtifact();
+
+  }
+  else
+  {
+
+    alarmON();
+
+    while(alarm)
+    {
+
+      if(checkPassword())
+      {
+
+        wrongAttempts = 0;
+
+        alarmOFF();
+
+      }
+
+      else
+      {
+
+        if(wrongAttempts >= 3)
+        {
+
+          lcd.clear();
+
+          lcd.setCursor(0,0);
+
+          lcd.print("Security");
+
+          lcd.setCursor(0,1);
+
+          lcd.print("Alert!");
+
+          tone(buzzer,1500);
+
+          delay(3000);
+
+        }
+
+        lcd.clear();
+
+        lcd.setCursor(0,0);
+
+        lcd.print("Try Again");
+
+        delay(1000);
+
+      }
+
+    }
+
+  }
+
+}
